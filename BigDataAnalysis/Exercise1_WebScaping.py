@@ -1,80 +1,54 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Nov 22 23:35:40 2020
-
-@author: zhao zhan
-"""
 
 import requests
 from bs4 import BeautifulSoup
-import json
-from pandas import DataFrame as df
+import random
 
-page = requests.get("https://www.familydollar.com/locations/")
-soup = BeautifulSoup(page.text, 'html.parser')
-
-# find all state links
-state_list = soup.find_all(class_ = 'itemlist')
-
-state = 'California'
-state_links = []
-
-for i in state_list:
-    cont = i.contents[0]
-    attr = cont.attrs
-    if attr['data-galoc'] == state:
-        hrefs = attr['href']
-        state_links.append(hrefs)
-
-# find all city links
-city_links = []
-
-for link in state_links:
-    page = requests.get(link)
-    soup = BeautifulSoup(page.text, 'html.parser')
-    familydollar_list = soup.find_all(class_ = 'itemlist')
-    for store in familydollar_list:
-        cont = store.contents[0]
-        attr = cont.attrs
-        city_hrefs = attr['href']
-        city_links.append(city_hrefs)
-
-# to get individual store links
-store_links = []
-
-for link in city_links:
-    locpage = requests.get(link)
-    locsoup = BeautifulSoup(locpage.text, 'html.parser')
-    locinfo = locsoup.find_all(type="application/ld+json")
-    for i in locinfo:
-        loccont = i.contents[0]
-        locjson = json.loads(loccont)
+# Define the function
+def scrapeWikiArticle(url, remaining_steps = 10):
+    # url defines the Wikipedia webpage to start
+    # remaining_step defines how many steps to run
+    if remaining_steps > 0:
+        # Connect to the url
+        response = requests.get(url=url)
+        
+        # Retrieve the webpage content
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Find and print the title of the webpage
+        title = soup.find(id="firstHeading")
+        print(title.text)
+        
+        # Find all the urls within the webpage
+        allLinks = soup.find(id="bodyContent").find_all("a")
+        random.shuffle(allLinks)
+        linkToScrape = 0
+        
+         # Find the next url to visit
+        for link in allLinks:
+            # We are only interested in other wiki articles
+            if link['href'].find("/wiki/") == -1: 
+                continue
+            if link['href'].find("https:") != -1:
+                continue
+            if link['href'].find("Commons:") != -1:
+                continue
+            if link['href'].find("Special:") != -1:
+                continue
+    
+            # Use this link to scrape
+            linkToScrape = link
+            break
+        # print(linkToScrape['href'])
+        
+        # Recursive function
         try:
-            store_url = locjson['url']
-            store_links.append(store_url)
+            scrapeWikiArticle(
+                "https://en.wikipedia.org" + linkToScrape['href'],
+                remaining_steps = remaining_steps - 1
+            )
         except:
-            pass
+            print(linkToScrape['href'])
 
-# get address and geolocation information
-stores = []
-
-for store in store_links:
-    storepage = requests.get(store)
-    storesoup = BeautifulSoup(storepage.text, 'html.parser')
-    storeinfo = storesoup.find_all(type="application/ld+json")
-    for i in storeinfo:
-        storecont = i.contents[0]
-        storejson = json.loads(storecont)
-        try:
-            store_addr = storejson['address']
-            store_addr.update(storejson['geo'])
-            stores.append(store_addr)
-        except:
-            pass
-
-# final data parsing
-stores_df = df.from_records(stores)
-stores_df.drop(['@type', 'addressCountry'], axis = 1, inplace = True)
-stores_df['Store'] = "Family Dollar"
-
-df.to_csv(stores_df, "family_dollar_locations.csv", sep = ",", index = False)
+# Run the main function
+scrapeWikiArticle("https://en.wikipedia.org/wiki/Hong_Kong")
